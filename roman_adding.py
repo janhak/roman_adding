@@ -42,8 +42,32 @@ instance, allowing IIII as well as IV, and even XXXXXX instead of LX.
 """
 
 import sys
+from collections import OrderedDict
 
 ROMAN_DIGITS = 'IVXLCDM'
+
+# Maps subtractive representation of numerals to longer additive notation
+# Ordered to enable swapping largest numbers first
+ADDITIVE_MAP = OrderedDict()
+ADDITIVE_MAP['CM']='DCCCC'
+ADDITIVE_MAP['CD']='CCCC'
+ADDITIVE_MAP['XC']='LXXXX'
+ADDITIVE_MAP['XL']='XXXX'
+ADDITIVE_MAP['IX']='VIIII'
+ADDITIVE_MAP['IV']='IIII'
+
+# Maps additive representations of numerals to shorthand subtractive notation
+REDUCTION_MAP = {}
+REDUCTION_MAP['IIIII']='V'
+REDUCTION_MAP['VIV']='IX'
+REDUCTION_MAP['VV']='X'
+REDUCTION_MAP['XXXXX']='L'
+REDUCTION_MAP['LXL']='XC'
+REDUCTION_MAP['LL']='C'
+REDUCTION_MAP['CCCCC']='D'
+REDUCTION_MAP['DCD']='CM'
+REDUCTION_MAP['DD']='M'
+
 
 def check_roman(s):
     """If 's' is not a roman number, raise a Value Error.
@@ -51,34 +75,71 @@ def check_roman(s):
     if not all(x in ROMAN_DIGITS for x in s):
         raise ValueError('{!r} is not a sequence of I, V, X, L, C, D or M'.format(s))
 
-def add(number1, number2):
-    """Add two strings representing roman numbers.
+def replace_subtractive(number):
+    """Replace subtractive form with additive form equivalent: 'IX' -> 'VIIII'."""
+    for sub,add in ADDITIVE_MAP.items():
+        if sub in number:
+            number = number.replace(sub,add)
+    return number
 
-    For instance:
+def replace_additive(number):
+    """Replace series of roman digits with subtractive form: 'IIII' -> 'IV'."""
+    for key, value in ADDITIVE_MAP.items():
+        if value in number:
+            number = number.replace(value, key)
+    return number
 
+def fold_digits(number):
+    """Fold series of roman digits into a single digit: IIIII -> V
+       
+       fold_digits will apply this reduction as many times as possible.
+       
+       >>> fold_digits('VIIIII')
+       >>> 'X'
+    """
+    while True:
+        number_before_fold = number
+        for digits, reduction in REDUCTION_MAP.items():
+            if digits in number:
+                number = number.replace(digits, reduction)
+        if number_before_fold == number:
+            return number
+
+def add(*numbers):
+    """Add strings representing roman numbers.
+    
       >>> add('IV', 'V')
       'IX'
+      >>> add('XVII', 'X', 'XIII')
+      'XL'
 
-    Raises ValueError if the strings contain any characters other than
-    'I', 'V', 'X', 'L', 'C', 'D' or 'M'
+    Raises:
+        ValueError: if numbers contain characters other then IVXLCDM.
     """
-    check_roman(number1)
-    check_roman(number2)
+    for n in numbers:
+        check_roman(n)       
 
-    sum = number1 + number2
-
-    if sum == 'IIII':
-        sum = 'IV'
-
-    return sum
+    additive_form = (replace_subtractive(n) for n in numbers)
+    additive_sum = ''.join(additive_form)
+    
+    # Sum must be sorted to enable further reduction ie. swaping 'IIIII' for 'V'
+    sorted_sum_gen = sorted(additive_sum, 
+                            key=lambda x: ROMAN_DIGITS.index(x),
+                            reverse=True)
+    sorted_sum = ''.join(sorted_sum_gen)
+    
+    reduced_sum = fold_digits(sorted_sum)
+    
+    # change additive representation to shortened form ie. swap 'IIII' for 'IV'    
+    return replace_additive(reduced_sum)
 
 
 def main(args):
-    """Allow adding things from the command line.
-    """
-    if len(args) != 2:
-        print('Usage: roman_adding.py <roman-number1> <roman-number2>')
-    print(add(args[0], args[1]))
+    """Allow adding roman numbers from the command line."""
+    if len(args) <= 1:
+        print('Usage: roman_adding.py <roman-number-1> [...] <roman-number-n>')
+    else:
+        print(add(*args))
 
 if __name__ == '__main__':
     main(sys.argv[1:])
